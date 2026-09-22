@@ -1,0 +1,167 @@
+[worldserver]
+
+########################################
+# mod-worldscale configuration
+#
+# Open world (non-instance) level scaling. Dungeons and raids are handled by
+# mod-autobalance; battlegrounds and arenas are never touched.
+#
+# Scaling is applied per player: creature stats in the database are never
+# changed, only the damage exchanged between a player and a creature, so two
+# players of different levels can fight the same creature at the same time.
+########################################
+#
+#    WorldScale.Enable
+#        Description: Enable open world level scaling.
+#        Default:     1 - (Enabled)
+#                     0 - (Disabled)
+
+WorldScale.Enable = 1
+
+#
+#    WorldScale.ScaleUp
+#        Description: Scale creatures *below* the player's level up, so old
+#                     zones stay dangerous and worth questing in.
+#        Default:     1 - (Enabled)
+
+WorldScale.ScaleUp = 1
+
+#
+#    WorldScale.ScaleDown
+#        Description: Scale creatures *above* the player's level down, so any
+#                     zone can be entered at any level.
+#        Default:     1 - (Enabled)
+
+WorldScale.ScaleDown = 1
+
+#
+#    WorldScale.LevelDelta
+#        Description: Target creature level, relative to the player's level.
+#                     0 means creatures fight as if they were exactly the
+#                     player's level. Positive values make the world harder.
+#        Range:       -60 to 10
+#        Default:     0
+
+WorldScale.LevelDelta = 0
+
+#
+#    WorldScale.MinPlayerLevel
+#        Description: Players below this level are not scaled at all (keeps the
+#                     starting experience untouched).
+#        Default:     1
+
+WorldScale.MinPlayerLevel = 1
+
+#
+#    WorldScale.AffectElites
+#        Description: Also scale elite and rare-elite creatures.
+#        Default:     1 - (Enabled)
+
+WorldScale.AffectElites = 1
+
+#
+#    WorldScale.AffectWorldBosses
+#        Description: Also scale open world bosses (Azuregos, Kazzak, ...).
+#                     Off by default: with this on, a level 15 character can
+#                     solo them.
+#        Default:     0 - (Disabled)
+
+WorldScale.AffectWorldBosses = 0
+
+#
+#    WorldScale.ScaleXP
+#        Description: Creatures that were scaled *up* to the player's level
+#                     also award experience for that level, so levelling in a
+#                     low level zone stays viable. Grey creatures included.
+#        Default:     1 - (Enabled)
+
+WorldScale.ScaleXP = 1
+
+#
+#    WorldScale.MinMultiplier / WorldScale.MaxMultiplier
+#        Description: Hard clamps on the computed damage multipliers, a safety
+#                     net against extreme level gaps (level 1 vs level 80).
+#        Default:     0.05 / 20.0
+
+WorldScale.MinMultiplier = 0.05
+WorldScale.MaxMultiplier = 20.0
+
+#
+#    WorldScale.PresentLevel
+#        Description: Show creatures that have been scaled *up* at the observing
+#                     player's level, instead of their own.
+#
+#                     Cosmetic only. UNIT_FIELD_LEVEL is an update field, so this
+#                     changes nothing but the number written into the packet sent
+#                     to one player: the creature's real level, its combat maths,
+#                     its experience value and everything the server computes are
+#                     untouched, and each player is sent their own number for the
+#                     same creature.
+#
+#                     Without it a mob scaled up to hit like level 60 still shows
+#                     a grey name, which is the one part of the illusion that
+#                     tells the player the wrong thing.
+#
+#                     Only the scale-up direction is relabelled. Creatures above
+#                     the player keep their real, higher level so they still read
+#                     as dangerous - which matters when ScaleDown is 0.
+#
+#                     Note the level reaches the client with the create-object
+#                     block, when the creature comes into view. A creature
+#                     already on screen when you level up keeps the old number
+#                     until it leaves and re-enters visibility.
+#        Default:     1 - (Enabled)
+#
+
+WorldScale.PresentLevel = 1
+
+#
+#    WorldScale.Aggro.LevelsBelow
+#        Description: Pull the aggro radius of a scaled-up creature back by
+#                     this many yards - the formula's own unit, one yard per
+#                     level. Presenting a creature at your level makes it as
+#                     alert as an at-level one, 20 yards, where a creature ten
+#                     levels down would have noticed you at 10 and one fifteen
+#                     down at the 5-yard floor. This applies to aggro only;
+#                     avoidance, hit chance and experience keep the presented
+#                     level. The 5-yard floor still applies after it.
+#
+#                       0  as alert as an at-level creature   (20 yards)
+#                       5  as if five levels below you        (15 yards)
+#                      10  as if ten levels below             (10 yards)
+#                      15  the floor, like a real grey         (5 yards)
+#
+#                     Live on `reload config`.
+#        Default:     0
+
+WorldScale.Aggro.LevelsBelow = 0
+
+#
+#    WorldScale.ScaleQuests
+#        Description: Measure quest experience at the player's level, and report
+#                     quest levels to the client accordingly.
+#
+#                     Experience is only ever adjusted *upwards*. A quest below
+#                     the player is recomputed at the player's level; a quest at
+#                     or above them is left alone, because it is already worth
+#                     more measured at its own level. So this can never reduce a
+#                     reward.
+#
+#                     For the display, a quest at or below the player is
+#                     reported as -1, the client's "use my own level" sentinel,
+#                     which it resolves when the quest is drawn rather than when
+#                     questcache.wdb is written - so it never goes stale. A quest
+#                     above the player keeps its real level and still reads as
+#                     being ahead of them.
+#
+#                     Quest money and item rewards are fixed columns with no
+#                     scaling path and are unaffected. Quest *availability* is
+#                     unaffected too: Player::SatisfyQuestLevel gates on MinLevel
+#                     and MaxLevel, never on the quest level.
+#
+#                     Note addons with their own bundled quest database (Questie)
+#                     show their own static levels and cannot see any of this.
+#        Default:     1 - (Enabled)
+#
+
+WorldScale.ScaleQuests = 1
