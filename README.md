@@ -39,3 +39,8 @@ A core carrying these additive hooks, each with its call site:
 `UnitScript::OnUnitRewardRage`, `UnitScript::OnUnitGetLevelForTarget`,
 `AllCreatureScript::OnCreatureGetAggroRange`,
 `PlayerScript::OnPlayerQuestComputeLevel` and `::OnPlayerQuestComputeExp`.
+
+## Licence
+
+GNU Affero General Public License v3.0, the licence AzerothCore and its
+modules use. See [LICENSE](LICENSE).
