@@ -36,6 +36,7 @@
 #include "Unit.h"
 #include "UpdateFields.h"
 #include "World.h"
+#include "WorldScaleMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -61,11 +62,9 @@ namespace
 
     WorldScaleConfig cfg;
 
-    struct Multipliers
-    {
-        float creatureDamage = 1.0f;  // applied to damage dealt by the creature
-        float playerDamage   = 1.0f;  // applied to damage dealt to the creature
-    };
+    // The arithmetic lives in WorldScaleMath.h, where it can be tested without
+    // a world; everything here is the part that needs one.
+    using Multipliers = WorldScaleMath::Multipliers;
 
     void LoadConfig()
     {
@@ -96,9 +95,8 @@ namespace
 
     uint8 TargetLevelFor(Player const* player)
     {
-        int32 maxLevel = int32(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
-        int32 level    = int32(player->GetLevel()) + cfg.LevelDelta;
-        return uint8(std::clamp<int32>(level, 1, maxLevel));
+        return WorldScaleMath::TargetLevel(player->GetLevel(), cfg.LevelDelta,
+                                          sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
     }
 
     // What level a particular observer should *see* on a creature. 0 means
@@ -146,19 +144,7 @@ namespace
         if (!entry)
             return 0;
 
-        int32 diffFactor = std::clamp(2 * (questLevel - int32(playerLevel)) + 20, 1, 10);
-        uint32 xp = uint32(diffFactor) * entry->Exp[quest->GetXPId()] / 10;
-
-        if (xp <= 100)
-            xp = 5 * ((xp + 2) / 5);
-        else if (xp <= 500)
-            xp = 10 * ((xp + 5) / 10);
-        else if (xp <= 1000)
-            xp = 25 * ((xp + 12) / 25);
-        else
-            xp = 50 * ((xp + 25) / 50);
-
-        return xp;
+        return WorldScaleMath::QuestXP(entry->Exp[quest->GetXPId()], playerLevel, questLevel);
     }
 
     uint8 PresentedLevelFor(Creature const* creature, Player const* observer)
@@ -172,14 +158,8 @@ namespace
         if (observer->GetLevel() < cfg.MinPlayerLevel)
             return 0;
 
-        uint8 const targetLevel = TargetLevelFor(observer);
-
-        // Only creatures being pulled *up* are relabelled. One above the player
-        // is genuinely harder than it looks and keeps its real level.
-        if (creature->GetLevel() >= targetLevel)
-            return 0;
-
-        return targetLevel;
+        return WorldScaleMath::PresentedLevel(creature->GetLevel(), TargetLevelFor(observer),
+                                              cfg.PresentLevel, cfg.ScaleUp);
     }
 
     bool GetMultipliers(Creature* creature, Player* player, Multipliers& out)
@@ -188,17 +168,11 @@ namespace
         if (!cinfo)
             return false;
 
-        if (player->GetLevel() < cfg.MinPlayerLevel)
-            return false;
-
         uint8 const creatureLevel = creature->GetLevel();
         uint8 const targetLevel   = TargetLevelFor(player);
 
-        if (creatureLevel == targetLevel)
-            return false;
-        if (creatureLevel < targetLevel && !cfg.ScaleUp)
-            return false;
-        if (creatureLevel > targetLevel && !cfg.ScaleDown)
+        if (!WorldScaleMath::ShouldScale(creatureLevel, targetLevel, player->GetLevel(),
+                                         cfg.MinPlayerLevel, cfg.ScaleUp, cfg.ScaleDown))
             return false;
 
         uint32 const expansion = std::min<uint32>(cinfo->expansion, MAX_EXPANSIONS - 1);
@@ -208,17 +182,10 @@ namespace
         if (!current || !target)
             return false;
 
-        float const currentHealth = float(current->BaseHealth[expansion]);
-        float const targetHealth  = float(target->BaseHealth[expansion]);
-        float const currentDamage = current->BaseDamage[expansion];
-        float const targetDamage  = target->BaseDamage[expansion];
-
-        if (currentHealth <= 0.0f || targetHealth <= 0.0f || currentDamage <= 0.0f || targetDamage <= 0.0f)
-            return false;
-
-        out.creatureDamage = std::clamp(targetDamage / currentDamage, cfg.MinMultiplier, cfg.MaxMultiplier);
-        out.playerDamage   = std::clamp(currentHealth / targetHealth, cfg.MinMultiplier, cfg.MaxMultiplier);
-        return true;
+        return WorldScaleMath::ComputeMultipliers(
+            float(current->BaseHealth[expansion]), float(target->BaseHealth[expansion]),
+            current->BaseDamage[expansion], target->BaseDamage[expansion],
+            cfg.MinMultiplier, cfg.MaxMultiplier, out);
     }
 
     // Scales one damage event. Works for both the uint32 and int32 damage hooks.
@@ -300,7 +267,7 @@ namespace
             return;
 
         uint32 const before = damage;
-        damage = uint32(std::max(1.0f, float(damage) / applied));
+        damage = WorldScaleMath::Unscale(damage, applied);
 
         // Debug only: "Logger.module" at level 5 shows the correction happening
         // per hit, which is the only way to watch it without a client.
@@ -451,7 +418,7 @@ public:
         if (!PresentedLevelFor(creature, observer))
             return;
 
-        range -= float(cfg.AggroLevelsBelow);
+        range = WorldScaleMath::AggroRange(range, cfg.AggroLevelsBelow);
     }
 };
 

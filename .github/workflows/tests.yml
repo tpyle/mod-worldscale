@@ -1,0 +1,37 @@
+name: tests
+
+# The arithmetic in src/WorldScaleMath.h includes nothing but the standard
+# library, so these tests need a compiler and googletest and nothing else -
+# no AzerothCore checkout, no core build. A run is well under a minute.
+#
+# The hooks that use that arithmetic are not covered here: they need a Player
+# and a Creature, so they are exercised by building this module inside a full
+# AzerothCore tree with -DBUILD_TESTING=ON, where mod-worldscale.cmake adds
+# these same test files to the core's unit_tests target.
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache googletest
+        uses: actions/cache@v4
+        with:
+          path: build-tests/_deps
+          key: gtest-${{ runner.os }}-v1.15.2
+
+      - name: Configure
+        run: cmake -S tests -B build-tests -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build-tests --parallel
+
+      - name: Test
+        run: ctest --test-dir build-tests --output-on-failure
