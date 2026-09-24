@@ -23,6 +23,40 @@ namespace
     constexpr float  MAX_MULT  = 20.0f;
 }
 
+// ------------------------------------------------------------ ScalesOnThisMap
+
+TEST(WorldScaleMap, TheOpenWorldIsAlwaysScaled)
+{
+    EXPECT_TRUE(ScalesOnThisMap(/*bg*/ false, /*raid*/ false, /*dungeon*/ false,
+                                /*scaleDungeons*/ false, /*scaleRaids*/ false));
+}
+
+TEST(WorldScaleMap, PvpInstancesAreNeverScaled)
+{
+    // A battleground is already a level bracket and an arena is meant to be
+    // symmetrical; no switch may turn this on.
+    EXPECT_FALSE(ScalesOnThisMap(true, false, false, true, true));
+    EXPECT_FALSE(ScalesOnThisMap(true, false, true, true, true));
+}
+
+TEST(WorldScaleMap, DungeonsFollowTheirSwitch)
+{
+    EXPECT_FALSE(ScalesOnThisMap(false, false, /*dungeon*/ true, /*scaleDungeons*/ false, false));
+    EXPECT_TRUE(ScalesOnThisMap(false, false, /*dungeon*/ true, /*scaleDungeons*/ true, false));
+}
+
+TEST(WorldScaleMap, RaidsFollowTheirOwn)
+{
+    // Map::IsDungeon() is also true for a raid, so a raid arrives here with
+    // both flags set. Asking about the raid first is what keeps the raid
+    // switch reachable at all - with the order reversed, a raid would be
+    // scaled by the *dungeon* setting and WorldScale.Raids would do nothing.
+    EXPECT_FALSE(ScalesOnThisMap(false, /*raid*/ true, /*dungeon*/ true,
+                                 /*scaleDungeons*/ true, /*scaleRaids*/ false));
+    EXPECT_TRUE(ScalesOnThisMap(false, /*raid*/ true, /*dungeon*/ true,
+                                /*scaleDungeons*/ false, /*scaleRaids*/ true));
+}
+
 // ---------------------------------------------------------------- TargetLevel
 
 TEST(WorldScaleTargetLevel, NoDeltaIsThePlayersOwnLevel)

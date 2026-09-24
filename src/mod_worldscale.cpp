@@ -55,6 +55,8 @@ namespace
         bool  PresentLevel      = true;   // show scaled-up creatures at the observer's level
         uint32 AggroLevelsBelow = 0;      // aggro as if this many levels below the player
         bool  ScaleQuests       = true;   // quest experience, and how quest levels present
+        bool  Dungeons          = false;  // scale inside dungeons (mod-autobalance's ground)
+        bool  Raids             = false;  // ...and raids
         float MinMultiplier     = 0.05f;
         float MaxMultiplier     = 20.0f;
         uint8 MinPlayerLevel    = 1;
@@ -78,6 +80,8 @@ namespace
         cfg.PresentLevel      = sConfigMgr->GetOption<bool>("WorldScale.PresentLevel", true);
         cfg.AggroLevelsBelow  = sConfigMgr->GetOption<uint32>("WorldScale.Aggro.LevelsBelow", 0);
         cfg.ScaleQuests       = sConfigMgr->GetOption<bool>("WorldScale.ScaleQuests", true);
+        cfg.Dungeons          = sConfigMgr->GetOption<bool>("WorldScale.Dungeons", false);
+        cfg.Raids             = sConfigMgr->GetOption<bool>("WorldScale.Raids", false);
         cfg.MinMultiplier     = sConfigMgr->GetOption<float>("WorldScale.MinMultiplier", 0.05f);
         cfg.MaxMultiplier     = sConfigMgr->GetOption<float>("WorldScale.MaxMultiplier", 20.0f);
         cfg.MinPlayerLevel    = uint8(sConfigMgr->GetOption<uint32>("WorldScale.MinPlayerLevel", 1));
@@ -111,8 +115,11 @@ namespace
             return false;
 
         Map* map = creature->GetMap();
-        // Dungeons/raids belong to mod-autobalance, PvP instances are never touched.
-        if (!map || map->IsDungeon() || map->IsBattlegroundOrArena())
+        if (!map)
+            return false;
+
+        if (!WorldScaleMath::ScalesOnThisMap(map->IsBattlegroundOrArena(), map->IsRaid(), map->IsDungeon(),
+                                             cfg.Dungeons, cfg.Raids))
             return false;
 
         // Anything a player owns fights on the player's side of the equation.

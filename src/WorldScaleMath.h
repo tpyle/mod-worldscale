@@ -37,6 +37,31 @@ namespace WorldScaleMath
         float playerDamage   = 1.0f;  // applied to damage dealt to the creature
     };
 
+    // Which maps this module scales on.
+    //
+    // PvP instances are never touched: a battleground is already a level
+    // bracket and an arena is meant to be symmetrical. Dungeons and raids are
+    // switches because something else may own them - mod-autobalance scales
+    // instances by group size and has its own level scaling, and two systems
+    // both multiplying a creature's health and damage compound into nonsense.
+    // Turn one off before turning the other on.
+    inline bool ScalesOnThisMap(bool isBattlegroundOrArena, bool isRaid, bool isDungeon,
+                                bool scaleDungeons, bool scaleRaids)
+    {
+        if (isBattlegroundOrArena)
+            return false;
+
+        // A raid is also a dungeon as far as Map is concerned, so it has to be
+        // asked about first or the raid switch would never be reached.
+        if (isRaid)
+            return scaleRaids;
+
+        if (isDungeon)
+            return scaleDungeons;
+
+        return true;   // the open world
+    }
+
     // The level a creature should be pulled to for this observer: the player's
     // level plus the configured delta, kept inside [1, maxPlayerLevel].
     // The clamp is what stops a positive delta pushing a creature past the

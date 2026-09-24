@@ -165,3 +165,18 @@ WorldScale.Aggro.LevelsBelow = 0
 #
 
 WorldScale.ScaleQuests = 1
+
+#
+#    WorldScale.Dungeons
+#    WorldScale.Raids
+#        Scale inside instances as well as in the open world. Off by default
+#        because mod-autobalance owns that ground: it scales an instance by
+#        group size and does its own level scaling, and two systems both
+#        multiplying a creature's health and damage compound into nonsense.
+#        Turn AutoBalance.Enable.Global off before turning these on.
+#        PvP instances are never scaled either way - a battleground is already
+#        a level bracket and an arena is meant to be symmetrical.
+#        Default: 0
+
+WorldScale.Dungeons = 0
+WorldScale.Raids = 0
