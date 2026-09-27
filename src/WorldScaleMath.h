@@ -150,6 +150,33 @@ namespace WorldScaleMath
         return u32(std::max(1.0f, float(damage) / applied));
     }
 
+    // How much of the way from the unscaled reward to the scaled one to
+    // actually pay. Used for both quest and kill experience, each with its own
+    // fraction.
+    //
+    // Scaling all the way to the player's level is a lot: an old quest can be
+    // worth ten times its written reward, and a grey creature goes from
+    // nothing to a full kill's worth. That makes levelling through old content
+    // faster than intended rather than merely worthwhile. A fraction of the
+    // *difference* keeps the direction - never less than the content was worth
+    // unscaled - while choosing how far to go.
+    //
+    // 1.0 is full scaling, 0.0 is stock behaviour. For quests the figure is
+    // what the client is told as well as what is granted (the server sends the
+    // computed reward in the quest details, offer-reward and turn-in paths,
+    // all three of which run through the same hook), so the quest log and the
+    // experience gained cannot disagree.
+    inline u32 BlendXP(u32 original, u32 scaled, float fraction)
+    {
+        if (scaled <= original)
+            return original;
+
+        fraction = std::clamp(fraction, 0.0f, 1.0f);
+
+        double const extra = double(scaled - original) * double(fraction);
+        return original + u32(std::lround(extra));
+    }
+
     // Quest::XPValue() recomputed as though the quest sat at questLevel,
     // mirroring the core's rounding steps exactly (QuestDef.cpp) so that the
     // two agree for the level the core would itself have used. baseXp is the

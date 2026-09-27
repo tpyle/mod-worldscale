@@ -225,6 +225,55 @@ TEST(WorldScaleUnscale, AnUnusableMultiplierLeavesTheDamageAlone)
 
 // -------------------------------------------------------------------- QuestXP
 
+TEST(WorldScaleBlend, FullFractionPaysTheScaledReward)
+{
+    EXPECT_EQ(BlendXP(/*original*/ 250, /*scaled*/ 2050, 1.0f), 2050u);
+}
+
+TEST(WorldScaleBlend, ZeroFractionPaysWhatTheQuestSays)
+{
+    EXPECT_EQ(BlendXP(250, 2050, 0.0f), 250u);
+}
+
+TEST(WorldScaleBlend, HalfSplitsTheDifference)
+{
+    // Not half the scaled figure - halfway between what the quest was written
+    // to pay and what it would pay at the player's level.
+    EXPECT_EQ(BlendXP(250, 2050, 0.5f), 1150u);
+    EXPECT_EQ(BlendXP(0, 1000, 0.5f), 500u);
+}
+
+TEST(WorldScaleBlend, AGreyKillsWholeRewardIsTheFraction)
+{
+    // Unscaled, a grey creature pays nothing at all, so the fraction decides
+    // the entire award rather than part of a difference.
+    EXPECT_EQ(BlendXP(0, 400, 0.5f), 200u);
+    EXPECT_EQ(BlendXP(0, 400, 0.0f), 0u);
+    EXPECT_EQ(BlendXP(0, 400, 1.0f), 400u);
+}
+
+TEST(WorldScaleBlend, NeverPaysLessThanTheQuestSays)
+{
+    // A quest above the player is not scaled at all, and a rounding accident
+    // must not turn the floor into a cut.
+    EXPECT_EQ(BlendXP(2050, 250, 0.5f), 2050u);
+    EXPECT_EQ(BlendXP(500, 500, 0.5f), 500u);
+}
+
+TEST(WorldScaleBlend, FractionIsClamped)
+{
+    EXPECT_EQ(BlendXP(250, 2050, 5.0f), 2050u);
+    EXPECT_EQ(BlendXP(250, 2050, -1.0f), 250u);
+}
+
+TEST(WorldScaleBlend, RoundsToTheNearestPoint)
+{
+    // 1 extra point at 0.5 is half a point; rounding down would make a tiny
+    // difference vanish entirely.
+    EXPECT_EQ(BlendXP(10, 11, 0.5f), 11u);
+    EXPECT_EQ(BlendXP(10, 13, 0.5f), 12u);
+}
+
 TEST(WorldScaleQuestXP, AQuestAtThePlayersLevelPaysTheBaseAmount)
 {
     // diffFactor is 20 at parity, clamped to 10, so the result is baseXp.

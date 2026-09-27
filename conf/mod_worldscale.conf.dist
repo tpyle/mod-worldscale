@@ -167,6 +167,47 @@ WorldScale.Aggro.LevelsBelow = 0
 WorldScale.ScaleQuests = 1
 
 #
+#    WorldScale.QuestXPFraction
+#    WorldScale.KillXPFraction
+#        How far from the unscaled reward towards the scaled one to actually
+#        pay - independently for quests and for kills. 1.0 pays the full amount a quest of the player's level
+#        would; 0.0 pays what the quest says and is the same as turning
+#        ScaleQuests off for experience; 0.5 splits the difference.
+#
+#        Full scaling is a lot: an old quest can be worth ten times its
+#        written reward, and a grey creature goes from nothing to a full kill's
+#        worth. That makes levelling through old content faster than intended
+#        rather than merely worthwhile. 1.0 is full scaling, 0.0 is stock
+#        behaviour, 0.5 splits the difference.
+#
+#        For a grey kill the unscaled value is zero, so KillXPFraction is the
+#        whole of the decision there: at 0.5 a grey pays half of what a
+#        creature of the player's level would.
+#
+#        Quest rewards are sent to the client as well as granted, so the quest
+#        log always shows what will actually be gained.
+#        Default: 1.0
+
+WorldScale.QuestXPFraction = 1.0
+WorldScale.KillXPFraction = 1.0
+
+#
+#    WorldScale.GroupXPSplit
+#        Whether a kill's experience is divided across the group, as it is by
+#        default: KillRewarder pays each member the group bonus multiplied by
+#        their share of the party's total level, so five players earn roughly
+#        what one would. Set to 0 and every member is paid what they would have
+#        earned alone - which on a realm where the group is usually bots stops
+#        grouping being a penalty.
+#
+#        The anti-power-levelling rules are untouched either way: a member too
+#        high for the victim still gets nothing, and a grey member in the party
+#        still halves the award.
+#        Default: 1 - (split, as the core does)
+
+WorldScale.GroupXPSplit = 1
+
+#
 #    WorldScale.Dungeons
 #    WorldScale.Raids
 #        Scale inside instances as well as in the open world. Off by default

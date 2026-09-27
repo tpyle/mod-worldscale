@@ -55,6 +55,9 @@ namespace
         bool  PresentLevel      = true;   // show scaled-up creatures at the observer's level
         uint32 AggroLevelsBelow = 0;      // aggro as if this many levels below the player
         bool  ScaleQuests       = true;   // quest experience, and how quest levels present
+        float QuestXPFraction   = 1.0f;   // how far towards the scaled quest reward to go
+        float KillXPFraction    = 1.0f;   // ...and towards the scaled kill reward
+        bool  GroupXPSplit      = true;   // divide a kill's experience across the group
         bool  Dungeons          = false;  // scale inside dungeons (mod-autobalance's ground)
         bool  Raids             = false;  // ...and raids
         float MinMultiplier     = 0.05f;
@@ -80,6 +83,9 @@ namespace
         cfg.PresentLevel      = sConfigMgr->GetOption<bool>("WorldScale.PresentLevel", true);
         cfg.AggroLevelsBelow  = sConfigMgr->GetOption<uint32>("WorldScale.Aggro.LevelsBelow", 0);
         cfg.ScaleQuests       = sConfigMgr->GetOption<bool>("WorldScale.ScaleQuests", true);
+        cfg.QuestXPFraction   = sConfigMgr->GetOption<float>("WorldScale.QuestXPFraction", 1.0f);
+        cfg.KillXPFraction    = sConfigMgr->GetOption<float>("WorldScale.KillXPFraction", 1.0f);
+        cfg.GroupXPSplit      = sConfigMgr->GetOption<bool>("WorldScale.GroupXPSplit", true);
         cfg.Dungeons          = sConfigMgr->GetOption<bool>("WorldScale.Dungeons", false);
         cfg.Raids             = sConfigMgr->GetOption<bool>("WorldScale.Raids", false);
         cfg.MinMultiplier     = sConfigMgr->GetOption<float>("WorldScale.MinMultiplier", 0.05f);
@@ -437,11 +443,39 @@ public:
             PLAYERHOOK_ON_GIVE_EXP,
             PLAYERHOOK_ON_CREATURE_KILL,
             PLAYERHOOK_ON_QUEST_COMPUTE_EXP,
-            PLAYERHOOK_ON_QUEST_COMPUTE_LEVEL
+            PLAYERHOOK_ON_QUEST_COMPUTE_LEVEL,
+            PLAYERHOOK_ON_REWARD_KILL_REWARDER
         }) { }
 
     // A creature that has been scaled up to the player's level should also pay
     // out experience for that level, otherwise low level zones stay pointless.
+    // Stop a kill's experience being divided across the group.
+    //
+    // KillRewarder hands each member
+    //
+    //     _groupRate * memberLevel / _aliveSumLevel
+    //
+    // of the kill's experience - the group bonus, shared out in proportion to
+    // level - so a party of five earns roughly what one player would. On a
+    // realm where the group is usually bots that is a penalty for grouping
+    // rather than a balance measure, so the rate is forced to 1.0 and every
+    // member is paid what they would have earned alone.
+    //
+    // The rate arrives by reference from the hook, which is why this needs no
+    // core change. Note that Player::GiveXP uses the *group rate* only for the
+    // chat message's "group bonus" figure, not for the amount, so this is the
+    // whole of the decision. The anti-power-levelling rules are untouched: a
+    // member too high for the victim still gets nothing, and a grey member in
+    // the party still halves the award (KillRewarder::_RewardXP).
+    void OnPlayerRewardKillRewarder(Player* /*player*/, KillRewarder* /*rewarder*/, bool /*isDungeon*/,
+                                   float& rate) override
+    {
+        if (!cfg.Enable || cfg.GroupXPSplit)
+            return;
+
+        rate = 1.0f;
+    }
+
     void OnPlayerGiveXP(Player* player, uint32& amount, Unit* victim, uint8 /*xpSource*/) override
     {
         if (!cfg.Enable || !cfg.ScaleXP || !player || !victim)
@@ -467,8 +501,10 @@ public:
         if (!baseCurrent || !amount)
             return;
 
-        // Keep whatever group/rate modifiers the core already applied.
-        amount = uint32(float(amount) * (float(baseTarget) / float(baseCurrent)));
+        // Keep whatever group/rate modifiers the core already applied, and pay
+        // only the configured part of the way towards the scaled figure.
+        uint32 const scaled = uint32(float(amount) * (float(baseTarget) / float(baseCurrent)));
+        amount = WorldScaleMath::BlendXP(amount, scaled, cfg.KillXPFraction);
     }
 
     // A creature that is grey for the player pays out nothing, and the core
@@ -514,7 +550,12 @@ public:
         if (!baseTarget)
             return;
 
-        killer->GiveXP(uint32(float(baseTarget) * sWorld->getRate(RATE_XP_KILL)), killed);
+        // A grey kill is worth nothing unscaled, so here the fraction is the
+        // whole of the decision: at 0.5 a grey pays half of what a creature of
+        // the player's level would.
+        uint32 const scaled = uint32(float(baseTarget) * sWorld->getRate(RATE_XP_KILL));
+        if (uint32 const award = WorldScaleMath::BlendXP(0, scaled, cfg.KillXPFraction))
+            killer->GiveXP(award, killed);
     }
 
     // Quest experience is measured against the quest's own level, so a level 10
@@ -536,8 +577,7 @@ public:
             return;
 
         uint32 const atPlayerLevel = QuestXPAtLevel(quest, playerLevel, int32(playerLevel));
-        if (atPlayerLevel > xpValue)
-            xpValue = atPlayerLevel;
+        xpValue = WorldScaleMath::BlendXP(xpValue, atPlayerLevel, cfg.QuestXPFraction);
     }
 
     // -1 is the client's "use my own level" sentinel, resolved when the quest is
