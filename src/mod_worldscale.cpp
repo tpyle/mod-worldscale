@@ -115,6 +115,30 @@ namespace
     // dangerous, which matters now that ScaleDown is off.
     uint8 PresentedLevelFor(Creature const* creature, Player const* observer);
 
+    // Whether this corpse has to stop lying about its level.
+    //
+    // Skinning is gated on the client, against the level the client holds for
+    // the corpse: it works out the required skill itself and will not even send
+    // the cast. The server does not agree - both Spell::CheckCast and
+    // Spell::EffectSkinning read GetUnitTarget()->GetLevel(), the real level,
+    // not getLevelForTarget - so a hare presented at level 30 is skinnable as
+    // far as the server is concerned and unskinnable as far as the player is
+    // concerned, with no error to explain it.
+    //
+    // So a skinnable corpse reverts to its true level, which is the one both
+    // sides then agree on. Narrowed to corpses with skinning loot rather than
+    // every corpse: outside skinning the presented level does no harm once the
+    // fight is over, and a corpse that silently renumbers itself is worth not
+    // showing where nothing needs it.
+    bool ShouldRevealRealLevel(Creature const* creature)
+    {
+        if (!creature || creature->IsAlive())
+            return false;
+
+        CreatureTemplate const* cinfo = creature->GetCreatureTemplate();
+        return cinfo && cinfo->SkinLootId != 0;
+    }
+
     bool IsScalableCreature(Creature const* creature)
     {
         if (!creature)
@@ -169,6 +193,9 @@ namespace
             return 0;
 
         if (observer->GetLevel() < cfg.MinPlayerLevel)
+            return 0;
+
+        if (ShouldRevealRealLevel(creature))
             return 0;
 
         return WorldScaleMath::PresentedLevel(creature->GetLevel(), TargetLevelFor(observer),
@@ -312,7 +339,8 @@ public:
             UNITHOOK_SHOULD_TRACK_VALUES_UPDATE_POS_BY_INDEX,
             UNITHOOK_ON_PATCH_VALUES_UPDATE,
             UNITHOOK_ON_UNIT_GET_LEVEL_FOR_TARGET,
-            UNITHOOK_ON_UNIT_REWARD_RAGE
+            UNITHOOK_ON_UNIT_REWARD_RAGE,
+            UNITHOOK_ON_UNIT_DEATH
         }) { }
 
     void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& damage) override
@@ -402,6 +430,31 @@ public:
 
         if (uint8 const scaled = PresentedLevelFor(unit->ToCreature(), observer))
             level = scaled;
+    }
+
+    // Returning the real level above is not enough on its own, because the
+    // client is never told. UNIT_FIELD_LEVEL is patched into the packet rather
+    // than changed on the creature, so as far as the core is concerned the
+    // field has not moved and there is nothing to send - the client keeps the
+    // scaled number it cached when the creature came into view, and goes on
+    // refusing to skin.
+    //
+    // ForceValuesUpdateAtIndex sets the field's bit in the change mask and
+    // queues the object, so the next update block carries UNIT_FIELD_LEVEL;
+    // PresentedLevelFor then leaves it alone and the true level goes out.
+    void OnUnitDeath(Unit* unit, Unit* /*killer*/) override
+    {
+        if (!cfg.Enable || !cfg.PresentLevel || !cfg.ScaleUp)
+            return;
+
+        Creature const* creature = unit ? unit->ToCreature() : nullptr;
+        if (!ShouldRevealRealLevel(creature) || !IsScalableCreature(creature))
+            return;
+
+        unit->ForceValuesUpdateAtIndex(UNIT_FIELD_LEVEL);
+
+        LOG_DEBUG("module", "mod-worldscale: present-level: {} died, resending its real level {} so it can be skinned",
+            unit->GetName(), unit->GetLevel());
     }
 };
 
