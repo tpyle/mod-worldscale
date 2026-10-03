@@ -115,7 +115,7 @@ namespace
     // dangerous, which matters now that ScaleDown is off.
     uint8 PresentedLevelFor(Creature const* creature, Player const* observer);
 
-    // Whether this corpse has to stop lying about its level.
+    // A dead corpse that something could be skinned off.
     //
     // Skinning is gated on the client, against the level the client holds for
     // the corpse: it works out the required skill itself and will not even send
@@ -124,19 +124,32 @@ namespace
     // not getLevelForTarget - so a hare presented at level 30 is skinnable as
     // far as the server is concerned and unskinnable as far as the player is
     // concerned, with no error to explain it.
-    //
-    // So a skinnable corpse reverts to its true level, which is the one both
-    // sides then agree on. Narrowed to corpses with skinning loot rather than
-    // every corpse: outside skinning the presented level does no harm once the
-    // fight is over, and a corpse that silently renumbers itself is worth not
-    // showing where nothing needs it.
-    bool ShouldRevealRealLevel(Creature const* creature)
+    bool IsSkinnableCorpse(Creature const* creature)
     {
         if (!creature || creature->IsAlive())
             return false;
 
         CreatureTemplate const* cinfo = creature->GetCreatureTemplate();
         return cinfo && cinfo->SkinLootId != 0;
+    }
+
+    // Whether telling THIS observer the truth is what lets them skin.
+    //
+    // The arithmetic lives in WorldScaleMath so it can be tested without a
+    // server; this half is only about asking the right questions of the right
+    // objects. The skill asked for is the template's own - skinning for most,
+    // but herbalism, mining or engineering for some - rather than assumed.
+    bool TruthWouldLetThemSkin(Creature const* creature, Player const* observer, uint8 presentedLevel)
+    {
+        if (!observer || !IsSkinnableCorpse(creature))
+            return false;
+
+        CreatureTemplate const* cinfo = creature->GetCreatureTemplate();
+        if (!cinfo)
+            return false;
+
+        return WorldScaleMath::TruthWouldAllowSkinning(presentedLevel, creature->GetLevel(),
+            int32(observer->GetSkillValue(cinfo->GetRequiredLootSkill())));
     }
 
     bool IsScalableCreature(Creature const* creature)
@@ -195,11 +208,23 @@ namespace
         if (observer->GetLevel() < cfg.MinPlayerLevel)
             return 0;
 
-        if (ShouldRevealRealLevel(creature))
+        uint8 const presented = WorldScaleMath::PresentedLevel(creature->GetLevel(), TargetLevelFor(observer),
+                                                               cfg.PresentLevel, cfg.ScaleUp);
+
+        // A skinnable corpse tells this observer the truth, but only when the
+        // lie is the thing stopping them. Decided per observer because that is
+        // the grain the whole mechanism works at: the level is patched into
+        // each client's packet separately, so one person can be told the real
+        // level while everybody else still sees the scaled one.
+        //
+        // The resend on death is not per observer - a change mask covers the
+        // field for everyone - but that costs nothing here. Anybody who does
+        // not need the truth is simply sent the presented value again,
+        // unchanged, so their client has nothing to react to.
+        if (presented && TruthWouldLetThemSkin(creature, observer, presented))
             return 0;
 
-        return WorldScaleMath::PresentedLevel(creature->GetLevel(), TargetLevelFor(observer),
-                                              cfg.PresentLevel, cfg.ScaleUp);
+        return presented;
     }
 
     bool GetMultipliers(Creature* creature, Player* player, Multipliers& out)
@@ -440,15 +465,17 @@ public:
     // refusing to skin.
     //
     // ForceValuesUpdateAtIndex sets the field's bit in the change mask and
-    // queues the object, so the next update block carries UNIT_FIELD_LEVEL;
-    // PresentedLevelFor then leaves it alone and the true level goes out.
+    // queues the object, so the next update block carries UNIT_FIELD_LEVEL.
+    // PresentedLevelFor then decides, per observer, who is told the truth: a
+    // skinner the lie was blocking gets the real level, and everybody else is
+    // sent the presented value again unchanged, which their client can ignore.
     void OnUnitDeath(Unit* unit, Unit* /*killer*/) override
     {
         if (!cfg.Enable || !cfg.PresentLevel || !cfg.ScaleUp)
             return;
 
         Creature const* creature = unit ? unit->ToCreature() : nullptr;
-        if (!ShouldRevealRealLevel(creature) || !IsScalableCreature(creature))
+        if (!IsSkinnableCorpse(creature) || !IsScalableCreature(creature))
             return;
 
         unit->ForceValuesUpdateAtIndex(UNIT_FIELD_LEVEL);

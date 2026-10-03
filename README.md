@@ -23,6 +23,46 @@ world and a single global level could not be right for all of them.
 | aggro range | scaled-up creatures otherwise aggro from the range their real level implies |
 | rage | the rage formula reads raw damage, so a scaled exchange gave the wrong rage in both directions; the damage is unscaled again before the formula sees it |
 
+## Skinning, and who gets told the truth
+
+A scaled-up corpse is unskinnable to the client and skinnable to the server at
+the same time. The client works the required skill out itself, from the level it
+holds for the corpse, and will not even send the cast; the server disagrees,
+because both `Spell::CheckCast` and `Spell::EffectSkinning` read
+`GetUnitTarget()->GetLevel()` - the real level - and not `getLevelForTarget`. So
+a level 5 hare presented at 30 cannot be skinned by anyone, with no error to
+explain why.
+
+A skinnable corpse therefore stops lying, but only to the observers the lie is
+actually blocking. Three things have to hold for one observer:
+
+1. they have some of the skill the corpse asks for - the template's own, so
+   herbalism, mining or engineering where those apply, not skinning assumed;
+2. the level they are being shown puts it out of reach;
+3. the real level does not.
+
+The third is the point. If they could not skin it at its true level either, the
+lie is not what is stopping them, and renumbering the corpse in front of them
+would be a cosmetic change that bought nothing - so it keeps its scaled level.
+
+This is decided **per observer**, which is the grain the whole mechanism works
+at: the level is patched into each client's packet separately, so one person can
+be told the real level while everybody else goes on seeing the scaled one. The
+resend on death is not per observer - a change mask covers the field for
+everyone - but that costs nothing, because anybody who does not need the truth
+is sent the presented value again, unchanged, and their client has nothing to
+react to.
+
+The arithmetic is `WorldScaleMath::SkinningRequirement` and
+`TruthWouldAllowSkinning`, so it is tested without a server. It replicates the
+core's own formula rather than approximating it:
+
+    ReqValue = (skillValue < 100 ? (level - 10) * 10 : level * 5)
+
+which is worth knowing is discontinuous - a hundredth point of skill moves the
+requirement a long way, and below level 10 the first branch goes negative and
+means no requirement at all.
+
 ## Configuration (`mod_worldscale.conf`)
 
 `WorldScale.Enable`, `.ScaleUp`, `.ScaleDown`, `.LevelDelta`,

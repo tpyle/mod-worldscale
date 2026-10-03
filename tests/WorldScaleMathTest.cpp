@@ -313,3 +313,84 @@ TEST(WorldScaleQuestXP, RoundsTheWayTheCoreDoes)
     EXPECT_EQ(QuestXP(930, 40, 40) % 25, 0u);
     EXPECT_EQ(QuestXP(4300, 40, 40) % 50, 0u);
 }
+
+// ---------------------------------------------------------------------------
+// Telling the truth about a skinnable corpse.
+//
+// The level a corpse is presented at is what the client checks skinning
+// against, so a scaled-up beast can be unskinnable to a client and skinnable
+// to the server at the same time. These decide when the lie is worth dropping
+// for one observer - and, as importantly, when it is not.
+// ---------------------------------------------------------------------------
+
+TEST(WorldScaleSkinning, RequirementFollowsTheCoreFormula)
+{
+    // Spell::CheckCast: (skillValue < 100 ? (level - 10) * 10 : level * 5).
+    EXPECT_EQ(SkinningRequirement(30, 50), 200u);    // under 100 skill
+    EXPECT_EQ(SkinningRequirement(30, 100), 150u);   // at 100, the other branch
+    EXPECT_EQ(SkinningRequirement(30, 400), 150u);
+    EXPECT_EQ(SkinningRequirement(80, 450), 400u);
+}
+
+TEST(WorldScaleSkinning, BelowLevelTenThereIsNoRequirement)
+{
+    // The first branch goes negative there, which must read as zero rather
+    // than wrapping into an enormous unsigned number.
+    EXPECT_EQ(SkinningRequirement(1, 1), 0u);
+    EXPECT_EQ(SkinningRequirement(9, 1), 0u);
+    EXPECT_EQ(SkinningRequirement(10, 1), 0u);
+    EXPECT_EQ(SkinningRequirement(11, 1), 10u);
+}
+
+TEST(WorldScaleSkinning, TheLieIsDroppedWhenItIsWhatBlocksThem)
+{
+    // A level 5 hare shown to a level 30 player as level 30. Skinning 40:
+    // presented wants (30-10)*10 = 200, real wants 0.
+    EXPECT_TRUE(TruthWouldAllowSkinning(30, 5, 40));
+
+    // Same shape higher up: a level 40 beast presented at 80, skill 300.
+    // Presented wants 400, real wants 200.
+    EXPECT_TRUE(TruthWouldAllowSkinning(80, 40, 300));
+}
+
+TEST(WorldScaleSkinning, TheLieStaysWhenTheyCouldNotSkinItAnyway)
+{
+    // This is the case the narrowing is for. A level 40 beast presented at 80
+    // to somebody with skinning 1: the real level wants 300 and they have 1,
+    // so the truth would not help and the corpse keeps its scaled level.
+    EXPECT_FALSE(TruthWouldAllowSkinning(80, 40, 1));
+
+    // Nor for somebody with no skinning at all.
+    EXPECT_FALSE(TruthWouldAllowSkinning(80, 5, 0));
+    EXPECT_FALSE(TruthWouldAllowSkinning(80, 5, -1));
+}
+
+TEST(WorldScaleSkinning, TheLieStaysWhenTheyCanSkinItAlready)
+{
+    // Nothing is gained by renumbering a corpse somebody can already skin at
+    // the level they are being shown. Skinning 450, presented level 30 wants
+    // 150.
+    EXPECT_FALSE(TruthWouldAllowSkinning(30, 5, 450));
+}
+
+TEST(WorldScaleSkinning, NothingToRevealWhenTheLevelWasNotRaised)
+{
+    // PresentedLevel only ever scales up, so these are the cases where the
+    // presented level is not a lie at all.
+    EXPECT_FALSE(TruthWouldAllowSkinning(30, 30, 40));
+    EXPECT_FALSE(TruthWouldAllowSkinning(5, 30, 40));
+}
+
+TEST(WorldScaleSkinning, TheBoundaryBetweenTheTwoBranches)
+{
+    // Skill 99 takes the (level-10)*10 branch and skill 100 takes level*5, so
+    // a point of skill can move the requirement a long way. A level 20 corpse
+    // wants 100 either way, which makes it the one level where they agree.
+    EXPECT_EQ(SkinningRequirement(20, 99), 100u);
+    EXPECT_EQ(SkinningRequirement(20, 100), 100u);
+
+    // At 99 skill the presented requirement is 100, one point out of reach.
+    EXPECT_TRUE(TruthWouldAllowSkinning(20, 10, 99));
+    // At 100 skill they meet it exactly, so there is nothing to reveal.
+    EXPECT_FALSE(TruthWouldAllowSkinning(20, 10, 100));
+}

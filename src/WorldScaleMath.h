@@ -126,6 +126,41 @@ namespace WorldScaleMath
         return targetLevel;
     }
 
+    // The skill a corpse of this level demands to be skinned, as the core
+    // works it out in Spell::CheckCast for SPELL_EFFECT_SKINNING:
+    //
+    //     ReqValue = (skillValue < 100 ? (TargetLevel - 10) * 10 : TargetLevel * 5)
+    //
+    // Replicated rather than approximated, because it decides whether telling
+    // the truth about a corpse's level would actually let the cast through.
+    // Below level 10 the first branch goes negative, which reads as no
+    // requirement at all.
+    inline u32 SkinningRequirement(u8 level, i32 skillValue)
+    {
+        i32 const required = skillValue < 100 ? (i32(level) - 10) * 10 : i32(level) * 5;
+        return required < 0 ? 0u : u32(required);
+    }
+
+    // Whether telling one observer a corpse's real level is what makes the
+    // difference between being able to skin it and not.
+    //
+    // Three things have to hold: they have some of the skill the corpse asks
+    // for, the level they are being shown puts it out of reach, and the real
+    // level does not. The last is the point - if they could not skin it at its
+    // true level either then the lie is not what is stopping them, and
+    // renumbering the corpse in front of them buys nothing.
+    inline bool TruthWouldAllowSkinning(u8 presentedLevel, u8 realLevel, i32 skillValue)
+    {
+        if (presentedLevel <= realLevel)
+            return false;           // the scaling is not making it harder
+
+        if (skillValue <= 0)
+            return false;           // they cannot skin anything at all
+
+        return SkinningRequirement(presentedLevel, skillValue) > u32(skillValue)
+            && SkinningRequirement(realLevel, skillValue) <= u32(skillValue);
+    }
+
     // Aggro range for a creature that is being presented at the player's
     // level. Such a creature would otherwise aggro from the range its real
     // level implies - the core widens aggro range by the level gap - so the
