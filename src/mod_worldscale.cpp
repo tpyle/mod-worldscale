@@ -393,14 +393,14 @@ public:
         auto const pos = posPointers.other.find(UNIT_FIELD_LEVEL);
         if (pos == posPointers.other.end())
         {
-            if (target->GetSession() && !target->GetSession()->IsBot() && unit->IsCreature())
+            if (target->GetSession() && !target->GetSession()->IsHeadless() && unit->IsCreature())
                 LOG_DEBUG("module", "mod-worldscale: present-level: {} sees {} but UNIT_FIELD_LEVEL is not tracked in this block",
                     target->GetName(), unit->GetName());
             return;
         }
 
         uint8 const presented = PresentedLevelFor(unit->ToCreature(), target);
-        if (target->GetSession() && !target->GetSession()->IsBot())
+        if (target->GetSession() && !target->GetSession()->IsHeadless())
             LOG_DEBUG("module", "mod-worldscale: present-level: {} (L{}) sees {} (L{}) -> {}",
                 target->GetName(), target->GetLevel(), unit->GetName(), unit->GetLevel(), presented);
         if (!presented)
