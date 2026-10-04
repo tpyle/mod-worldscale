@@ -480,8 +480,13 @@ public:
 
         unit->ForceValuesUpdateAtIndex(UNIT_FIELD_LEVEL);
 
-        LOG_DEBUG("module", "mod-worldscale: present-level: {} died, resending its real level {} so it can be skinned",
-            unit->GetName(), unit->GetLevel());
+        // Deliberately not "sending the real level": this only puts the field
+        // back in the next update block. Who is told the truth is decided
+        // per observer in PresentedLevelFor, and the per-observer debug line
+        // in OnPatchValuesUpdate is where that shows up - a reveal reads as
+        // "-> 0" there, meaning the real value went out unpatched.
+        LOG_DEBUG("module", "mod-worldscale: present-level: {} died skinnable, requeueing its level (real {}) "
+            "for a per-observer decision", unit->GetName(), unit->GetLevel());
     }
 };
 
